@@ -1,4 +1,4 @@
-package com.backendlab.coupon.enums;
+package com.backendlab.coupon.coupon.enums;
 
 public enum CouponStatus {
     ACTIVE,
