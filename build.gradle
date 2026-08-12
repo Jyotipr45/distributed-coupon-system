@@ -40,4 +40,15 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    systemProperty 'user.timezone', 'UTC'
+
+    testLogging {
+        showStandardStreams = true
+        events "passed", "failed", "skipped", "standard_out", "standard_error"
+    }
+}
+
+tasks.named('bootRun') {
+    systemProperty 'user.timezone', 'UTC'
 }

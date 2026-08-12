@@ -40,11 +40,14 @@ CREATE TABLE coupon (
 
                         expiry_time TIMESTAMP NOT NULL,
 
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL
+                            DEFAULT CURRENT_TIMESTAMP,
 
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL
+                            DEFAULT CURRENT_TIMESTAMP,
 
-                        CONSTRAINT uk_coupon_code UNIQUE (coupon_code),
+                        CONSTRAINT uk_coupon_code
+                            UNIQUE (coupon_code),
 
                         CONSTRAINT chk_total_quantity
                             CHECK (total_quantity >= 0),
@@ -54,32 +57,13 @@ CREATE TABLE coupon (
 
                         CONSTRAINT chk_remaining_less_than_total
                             CHECK (remaining_quantity <= total_quantity)
-
 );
 
 -- ============================================================================
--- INDEX
--- Frequently searched using coupon code.
+-- TABLE: coupon_claim
+-- One record represents one user's claim for one coupon.
 -- ============================================================================
 
-CREATE INDEX idx_coupon_code
-    ON coupon(coupon_code);
-
-
-
-
-
--- ============================================================================
--- TABLE : coupon_claim
---
--- One record represents one user's coupon claim.
---
--- Example
---
--- User 1001
--- Claimed WELCOME100
--- SUCCESS
--- ============================================================================
 CREATE TABLE coupon_claim (
 
                               id BIGSERIAL PRIMARY KEY,
@@ -90,14 +74,18 @@ CREATE TABLE coupon_claim (
 
                               status VARCHAR(20) NOT NULL,
 
-                              claimed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                              claimed_at TIMESTAMP NOT NULL
+                                  DEFAULT CURRENT_TIMESTAMP,
 
-                              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                              created_at TIMESTAMP NOT NULL
+                                  DEFAULT CURRENT_TIMESTAMP,
 
                               CONSTRAINT fk_coupon_claim_coupon
                                   FOREIGN KEY (coupon_id)
-                                      REFERENCES coupon(id)
+                                      REFERENCES coupon(id),
 
+                              CONSTRAINT uk_coupon_claim_coupon_user
+                                  UNIQUE (coupon_id, user_id)
 );
 
 -- ============================================================================
