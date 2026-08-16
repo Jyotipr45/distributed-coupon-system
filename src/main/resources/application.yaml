@@ -2,7 +2,7 @@ spring:
   application:
     name: distributed-coupon-system
   datasource:
-    url: jdbc:postgresql://localhost:5432/coupon_db
+    url: jdbc:postgresql://localhost:5433/coupon_db
     username: postgres
     password: postgres
 
