@@ -26,7 +26,7 @@ class CouponRepositoryTest {
     void shouldSaveAndLoadCoupon() {
 
         Coupon coupon = Coupon.builder()
-                .couponCode("WELCOME100")
+                .couponCode("REPOSITORY_TEST_WELCOME_002")
                 .totalQuantity(100)
                 .remainingQuantity(100)
                 .status(CouponStatus.ACTIVE)
@@ -42,7 +42,7 @@ class CouponRepositoryTest {
                 .orElseThrow();
 
         assertThat(foundCoupon.getCouponCode())
-                .isEqualTo("WELCOME100");
+                .isEqualTo("REPOSITORY_TEST_WELCOME_002");
 
         assertThat(foundCoupon.getRemainingQuantity())
                 .isEqualTo(100);
