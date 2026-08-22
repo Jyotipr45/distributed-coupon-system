@@ -16,6 +16,7 @@ import com.backendlab.coupon.coupon.exception.CouponInactiveException;
 import com.backendlab.coupon.coupon.exception.CouponNotFoundException;
 import com.backendlab.coupon.coupon.repository.CouponRepository;
 import jakarta.persistence.EntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,17 +46,6 @@ public class ClaimServiceImpl implements ClaimService {
             CreateClaimRequest request
     ) {
 
-        /*
-         * ================================================================
-         * STEP 1
-         * Verify that the coupon exists.
-         *
-         * IMPORTANT:
-         * We intentionally do NOT use findByIdForUpdate().
-         *
-         * The inventory update will be handled atomically by PostgreSQL.
-         * ================================================================
-         */
         Coupon coupon = couponRepository.findById(couponId)
                 .orElseThrow(() ->
                         new CouponNotFoundException(
@@ -63,53 +53,18 @@ public class ClaimServiceImpl implements ClaimService {
                         )
                 );
 
-        /*
-         * ================================================================
-         * STEP 2
-         * Validate coupon status.
-         * ================================================================
-         */
         if (coupon.getStatus() != CouponStatus.ACTIVE) {
             throw new CouponInactiveException(
                     "Coupon is not active"
             );
         }
 
-        /*
-         * ================================================================
-         * STEP 3
-         * Validate coupon expiry.
-         *
-         * This is an early application-level validation.
-         *
-         * The atomic UPDATE also checks expiry at database level,
-         * which protects us from concurrent/stale state.
-         * ================================================================
-         */
         if (coupon.getExpiryTime().isBefore(LocalDateTime.now())) {
             throw new CouponExpiredException(
                     "Coupon has expired"
             );
         }
 
-        /*
-         * ================================================================
-         * STEP 4
-         * Fast duplicate-claim check.
-         *
-         * This avoids unnecessary work when the user has already claimed
-         * the coupon.
-         *
-         * IMPORTANT:
-         * This check alone is NOT sufficient for concurrency.
-         *
-         * The database UNIQUE constraint:
-         *
-         * UNIQUE (coupon_id, user_id)
-         *
-         * remains the final protection against concurrent duplicate claims.
-         * ================================================================
-         */
         boolean alreadyClaimed =
                 couponClaimRepository.existsByCouponIdAndUserId(
                         couponId,
@@ -122,72 +77,23 @@ public class ClaimServiceImpl implements ClaimService {
             );
         }
 
-        /*
-         * ================================================================
-         * STEP 5
-         * Atomically reserve one coupon.
-         *
-         * The repository executes an UPDATE similar to:
-         *
-         * UPDATE coupon
-         * SET remaining_quantity = remaining_quantity - 1
-         * WHERE id = ?
-         *   AND status = ACTIVE
-         *   AND expiry_time > CURRENT_TIMESTAMP
-         *   AND remaining_quantity > 0
-         *
-         * PostgreSQL guarantees that this UPDATE is atomic.
-         *
-         * Result:
-         *
-         * 1 row updated -> inventory successfully reserved
-         * 0 rows updated -> coupon unavailable
-         * ================================================================
-         */
         int updatedRows =
                 couponRepository.decrementInventoryIfAvailable(
                         couponId
                 );
 
-        /*
-         * ================================================================
-         * STEP 6
-         * No inventory was reserved.
-         * ================================================================
-         */
         if (updatedRows == 0) {
             throw new CouponUnavailableException(
                     "Coupon is sold out"
             );
         }
 
-        /*
-         * ================================================================
-         * STEP 7
-         * Obtain a JPA reference to the coupon.
-         *
-         * We do NOT use the previously loaded managed Coupon entity
-         * for the relationship after the bulk UPDATE.
-         *
-         * The atomic UPDATE has already changed remaining_quantity
-         * directly in the database.
-         *
-         * getReference() gives us a lightweight entity reference that
-         * can be used by CouponClaim without loading the coupon again.
-         * ================================================================
-         */
         Coupon couponReference =
                 entityManager.getReference(
                         Coupon.class,
                         couponId
                 );
 
-        /*
-         * ================================================================
-         * STEP 8
-         * Create the claim.
-         * ================================================================
-         */
         CouponClaim claim = CouponClaim.builder()
                 .coupon(couponReference)
                 .userId(request.userId())
@@ -195,31 +101,43 @@ public class ClaimServiceImpl implements ClaimService {
                 .claimedAt(LocalDateTime.now())
                 .build();
 
-        /*
-         * ================================================================
-         * STEP 9
-         * Save the claim.
-         *
-         * If this INSERT fails, the entire transaction rolls back.
-         *
-         * Therefore:
-         *
-         * inventory decrement
-         *        +
-         * claim creation
-         *
-         * behave as one atomic business transaction.
-         * ================================================================
-         */
-        CouponClaim savedClaim =
-                couponClaimRepository.save(claim);
+        try {
 
-        /*
-         * ================================================================
-         * STEP 10
-         * Return successful claim.
-         * ================================================================
-         */
-        return CouponClaimMapper.toCreateResponse(savedClaim);
+            CouponClaim savedClaim =
+                    couponClaimRepository.saveAndFlush(claim);
+
+            return CouponClaimMapper.toCreateResponse(savedClaim);
+
+        } catch (DataIntegrityViolationException exception) {
+
+            if (isDuplicateClaimViolation(exception)) {
+                throw new DuplicateClaimException(
+                        "User has already claimed this coupon"
+                );
+            }
+
+            throw exception;
+        }
+    }
+
+    private boolean isDuplicateClaimViolation(
+            DataIntegrityViolationException exception
+    ) {
+
+        Throwable current = exception;
+
+        while (current != null) {
+
+            if (current.getMessage() != null
+                    && current.getMessage()
+                    .contains("uk_coupon_claim_coupon_user")) {
+
+                return true;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 }

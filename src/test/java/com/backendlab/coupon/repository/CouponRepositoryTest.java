@@ -23,6 +23,7 @@ class CouponRepositoryTest {
     private EntityManager entityManager;
 
     @Test
+    @Transactional
     void shouldSaveAndLoadCoupon() {
 
         Coupon coupon = Coupon.builder()
